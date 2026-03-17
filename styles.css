@@ -1,8 +1,33 @@
-/*
+.random-page-tags {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
+	margin-top: 8px;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.random-page-tags-empty {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
 
-If your plugin does not need CSS, delete this file.
+.random-page-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: 12px;
+	background-color: var(--background-modifier-hover);
+	font-size: var(--font-ui-small);
+}
 
-*/
+.random-page-tag-remove {
+	cursor: pointer;
+	color: var(--text-muted);
+	font-size: 14px;
+	line-height: 1;
+}
+
+.random-page-tag-remove:hover {
+	color: var(--text-error);
+}
