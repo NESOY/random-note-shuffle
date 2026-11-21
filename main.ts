@@ -1,4 +1,4 @@
-import { AbstractInputSuggest, App, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder } from 'obsidian';
+import { AbstractInputSuggest, App, moment, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder } from 'obsidian';
 
 type SelectionMode = 'random' | 'weighted-random';
 
@@ -7,6 +7,8 @@ interface RandomPageSettings {
 	weightProperty: string;
 	weightIntensity: number;
 	excludedFolders: string[];
+	updateOnOpen: boolean;
+	dateFormat: string;
 }
 
 const DEFAULT_SETTINGS: RandomPageSettings = {
@@ -14,6 +16,8 @@ const DEFAULT_SETTINGS: RandomPageSettings = {
 	weightProperty: 'updated',
 	weightIntensity: 50,
 	excludedFolders: [],
+	updateOnOpen: false,
+	dateFormat: 'YYYY-MM-DD HH:mm',
 };
 
 const SELECTION_MODE_OPTIONS: Record<SelectionMode, string> = {
@@ -99,13 +103,13 @@ export default class RandomPagePlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		this.addRibbonIcon('dice', 'Open random page', () => {
+		this.addRibbonIcon('dice', 'Open random note', () => {
 			this.openRandomPage();
 		});
 
 		this.addCommand({
 			id: 'open-random-page',
-			name: 'Open random page',
+			name: 'Open random note',
 			callback: () => {
 				this.openRandomPage();
 			},
@@ -114,7 +118,7 @@ export default class RandomPagePlugin extends Plugin {
 		this.addSettingTab(new RandomPageSettingTab(this.app, this));
 	}
 
-	openRandomPage() {
+	async openRandomPage() {
 		const excluded = this.settings.excludedFolders;
 
 		const files = this.app.vault.getMarkdownFiles().filter((file) => {
@@ -136,7 +140,31 @@ export default class RandomPagePlugin extends Plugin {
 				selected = files[Math.floor(Math.random() * files.length)];
 		}
 
-		this.app.workspace.openLinkText(selected.path, '', false);
+		await this.app.workspace.openLinkText(selected.path, '', false);
+
+		if (this.settings.updateOnOpen) {
+			await this.markReviewed(selected);
+		}
+	}
+
+	/**
+	 * 뽑힌 노트의 weight property를 현재 시각으로 갱신한다.
+	 * 다시 뽑힐 확률이 낮아져 간격 반복(spaced repetition)이 된다.
+	 */
+	private async markReviewed(file: TFile) {
+		const prop = this.settings.weightProperty;
+		if (!prop) {
+			return;
+		}
+		try {
+			const value = moment().format(this.settings.dateFormat || DEFAULT_SETTINGS.dateFormat);
+			await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+				frontmatter[prop] = value;
+			});
+		} catch (e) {
+			console.error('[random-note-shuffle] Failed to update frontmatter', e);
+			new Notice(`Failed to update "${prop}" of ${file.basename}.`);
+		}
 	}
 
 	private selectWeightedRandom(files: TFile[]): TFile {
@@ -251,6 +279,34 @@ class RandomPageSettingTab extends PluginSettingTab {
 							await this.plugin.saveSettings();
 						})
 				);
+
+			new Setting(containerEl)
+				.setName('Update date on open')
+				.setDesc('Set the weight property to now when a note is opened, so it is less likely to come up again soon.')
+				.addToggle((toggle) =>
+					toggle
+						.setValue(this.plugin.settings.updateOnOpen)
+						.onChange(async (value) => {
+							this.plugin.settings.updateOnOpen = value;
+							await this.plugin.saveSettings();
+							this.display();
+						})
+				);
+
+			if (this.plugin.settings.updateOnOpen) {
+				new Setting(containerEl)
+					.setName('Date format')
+					.setDesc('Moment.js format used when writing the date.')
+					.addText((text) =>
+						text
+							.setPlaceholder(DEFAULT_SETTINGS.dateFormat)
+							.setValue(this.plugin.settings.dateFormat)
+							.onChange(async (value) => {
+								this.plugin.settings.dateFormat = value.trim() || DEFAULT_SETTINGS.dateFormat;
+								await this.plugin.saveSettings();
+							})
+					);
+			}
 		}
 
 		// Add folder input
